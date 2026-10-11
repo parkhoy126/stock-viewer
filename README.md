@@ -12,6 +12,7 @@ pip install -r requirements.txt
 
 python main.py AAPL           # 애플 최근 5거래일
 python main.py 005930.KS 10   # 삼성전자(코스피) 최근 10거래일
+python main.py                            # 인자 없이 실행하면 질문을 받음
 python main.py 005930.KS --chart              # 차트 저장 (charts/005930.KS.png)
 python main.py AAPL --chart --months 12       # 최근 12개월 차트
 ```
@@ -41,5 +42,6 @@ python main.py AAPL --chart --months 12       # 최근 12개월 차트
 ## 다음 계획
 - [x] 이동평균선 계산
 - [x] 차트 그리기 (matplotlib)
+- [x] 입력(input)으로 종목 코드 받기
 - [ ] 여러 종목 한 번에 조회
 - [ ] 골든크로스/데드크로스 표시

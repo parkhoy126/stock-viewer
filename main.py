@@ -80,30 +80,72 @@ def print_prices(ticker: str, close, days: int):
     print(f"기간 등락률: {change:+.2f}%")
 
 
-def main():
-    parser = argparse.ArgumentParser(description="간단한 주가 조회기")
-    parser.add_argument("ticker", help="종목 코드 (예: AAPL, 005930.KS, 035720.KQ)")
+def ask(prompt: str, default: str = "") -> str:
+    """질문을 출력하고 입력을 받는다. 그냥 Enter를 치면 기본값을 쓴다."""
+    suffix = f" (기본 {default})" if default else ""
+    answer = input(f"{prompt}{suffix}: ").strip()
+    return answer or default
+
+
+def ask_int(prompt: str, default: int) -> int:
+    """정수를 입력받는다. 숫자가 아니거나 1보다 작으면 다시 묻는다."""
+    while True:
+        answer = ask(prompt, str(default))
+        if answer.isdigit() and int(answer) >= 1:
+            return int(answer)
+        print("1 이상의 숫자를 입력하세요.")
+
+
+def ask_inputs():
+    """터미널에서 하나씩 물어보고 조회 설정을 돌려준다."""
+    print("주가 조회기 (종료: Ctrl+C)")
+    print("종목 코드 예시: AAPL (미국), 005930.KS (코스피), 035720.KQ (코스닥)")
+    ticker = ""
+    while not ticker:
+        ticker = ask("종목 코드").upper()
+    days = ask_int("출력할 거래일 수", 5)
+    chart = ask("이동평균선 차트도 저장할까요? (y/n)", "n").lower() in ("y", "yes")
+    months = ask_int("차트 기간(개월)", 6) if chart else 6
+    return ticker, days, chart, months
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="간단한 주가 조회기 (인자 없이 실행하면 질문을 받습니다)")
+    parser.add_argument("ticker", nargs="?", help="종목 코드 (예: AAPL, 005930.KS, 035720.KQ)")
     parser.add_argument("days", nargs="?", type=int, default=5, help="출력할 거래일 수 (기본 5)")
     parser.add_argument("--chart", action="store_true", help="이동평균선 차트를 charts/ 에 저장")
     parser.add_argument("--months", type=int, default=6, help="차트 기간(개월, 기본 6)")
     args = parser.parse_args()
 
-    # 이동평균(60일)이 차트 첫날부터 나오도록, 요청 기간 + 약 3개월을 더 받아 계산한 뒤 자른다
-    fetch_months = args.months + 4 if args.chart else 1
+    if args.ticker:
+        return args.ticker, args.days, args.chart, args.months
+    return ask_inputs()
+
+
+def main():
     try:
-        history = get_history(args.ticker, f"{fetch_months}mo")
+        ticker, days, chart, months = parse_args()
+    except (KeyboardInterrupt, EOFError):
+        print("\n종료합니다.")
+        return
+
+    # 이동평균(60일)이 차트 첫날부터 나오도록, 요청 기간 + 약 4개월을 더 받아 계산한 뒤 자른다
+    # 차트가 없으면 요청한 거래일 수를 채울 만큼만 받는다 (한 달 약 20거래일)
+    fetch_months = months + 4 if chart else max(1, -(-days // 20) + 1)
+    try:
+        history = get_history(ticker, f"{fetch_months}mo")
     except ValueError as e:
         print(e)
         return
 
     close = history["Close"]
-    print_prices(args.ticker, close, args.days)
+    print_prices(ticker, close, days)
 
-    if args.chart:
+    if chart:
         df = add_moving_averages(close)
-        df = df[df.index >= df.index[-1] - pd.DateOffset(months=args.months)]
-        path = CHART_DIR / f"{args.ticker}.png"
-        plot_chart(args.ticker, df, path)
+        df = df[df.index >= df.index[-1] - pd.DateOffset(months=months)]
+        path = CHART_DIR / f"{ticker}.png"
+        plot_chart(ticker, df, path)
         print(f"차트 저장: {path}")
 
 
