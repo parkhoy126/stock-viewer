@@ -10,3 +10,6 @@ __pycache__/
 
 # macOS
 .DS_Store
+
+# 실행하면 생성되는 차트 이미지 (샘플은 docs/ 에 있음)
+charts/
