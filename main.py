@@ -28,11 +28,29 @@ GRID = "#e4e3df"
 
 
 def get_history(ticker: str, period: str = "1mo"):
-    """종목의 일봉 데이터를 가져온다."""
-    history = yf.Ticker(ticker).history(period=period)
+    """종목의 일봉 데이터와 거래 통화(예: USD, KRW)를 가져온다."""
+    stock = yf.Ticker(ticker)
+    history = stock.history(period=period)
     if history.empty:
         raise ValueError(f"'{ticker}' 데이터를 찾을 수 없습니다. 종목 코드를 확인하세요.")
-    return history
+    currency = stock.history_metadata.get("currency", "")
+    return history, currency
+
+
+# 소수점 없이 표시하는 통화 (원, 엔)
+ZERO_DECIMAL = {"KRW", "JPY"}
+SYMBOLS = {"USD": "$", "EUR": "€", "GBP": "£", "JPY": "¥", "CNY": "¥", "HKD": "HK$"}
+
+
+def format_price(value: float, currency: str) -> str:
+    """통화에 맞는 형식으로 가격을 문자열로 만든다. 예: $336.64, 262,000원"""
+    if currency == "KRW":
+        return f"{value:,.0f}원"
+    digits = 0 if currency in ZERO_DECIMAL else 2
+    number = f"{value:,.{digits}f}"
+    if currency in SYMBOLS:
+        return f"{SYMBOLS[currency]}{number}"
+    return f"{number} {currency}".strip()
 
 
 def add_moving_averages(close, windows=MA_WINDOWS):
@@ -43,7 +61,7 @@ def add_moving_averages(close, windows=MA_WINDOWS):
     return df
 
 
-def plot_chart(ticker: str, df, path: Path):
+def plot_chart(ticker: str, df, path: Path, currency: str = ""):
     """종가와 이동평균선을 그려 PNG로 저장한다."""
     plt.rcParams["font.family"] = ["AppleGothic", "sans-serif"]  # 한글 (macOS)
     plt.rcParams["axes.unicode_minus"] = False
@@ -55,7 +73,8 @@ def plot_chart(ticker: str, df, path: Path):
         if not series.empty:
             ax.plot(series.index, series, color=COLORS[w], linewidth=1.5, label=f"{w}일 이동평균")
 
-    ax.set_title(f"{ticker} 종가와 이동평균선", loc="left", color=INK, fontsize=13)
+    unit = f" ({currency})" if currency else ""
+    ax.set_title(f"{ticker} 종가와 이동평균선{unit}", loc="left", color=INK, fontsize=13)
     ax.grid(axis="y", color=GRID, linewidth=0.8)
     ax.set_axisbelow(True)
     for side in ("top", "right", "left"):
@@ -71,11 +90,11 @@ def plot_chart(ticker: str, df, path: Path):
     plt.close(fig)
 
 
-def print_prices(ticker: str, close, days: int):
+def print_prices(ticker: str, close, days: int, currency: str = ""):
     prices = close.tail(days)
-    print(f"[{ticker}] 최근 {len(prices)}거래일 종가")
+    print(f"[{ticker}] 최근 {len(prices)}거래일 종가 ({currency or '통화 정보 없음'})")
     for date, price in prices.items():
-        print(f"  {date:%Y-%m-%d}  {price:,.2f}")
+        print(f"  {date:%Y-%m-%d}  {format_price(price, currency)}")
     change = (prices.iloc[-1] / prices.iloc[0] - 1) * 100
     print(f"기간 등락률: {change:+.2f}%")
 
@@ -99,7 +118,7 @@ def ask_int(prompt: str, default: int) -> int:
 def ask_inputs():
     """터미널에서 하나씩 물어보고 조회 설정을 돌려준다."""
     print("주가 조회기 (종료: Ctrl+C)")
-    print("종목 코드 예시: AAPL (미국), 005930.KS (코스피), 035720.KQ (코스닥)")
+    print("종목 코드 예시: AAPL (미국), 005930.KS (코스피), 086520.KQ (코스닥)")
     ticker = ""
     while not ticker:
         ticker = ask("종목 코드").upper()
@@ -111,7 +130,7 @@ def ask_inputs():
 
 def parse_args():
     parser = argparse.ArgumentParser(description="간단한 주가 조회기 (인자 없이 실행하면 질문을 받습니다)")
-    parser.add_argument("ticker", nargs="?", help="종목 코드 (예: AAPL, 005930.KS, 035720.KQ)")
+    parser.add_argument("ticker", nargs="?", help="종목 코드 (예: AAPL, 005930.KS, 086520.KQ)")
     parser.add_argument("days", nargs="?", type=int, default=5, help="출력할 거래일 수 (기본 5)")
     parser.add_argument("--chart", action="store_true", help="이동평균선 차트를 charts/ 에 저장")
     parser.add_argument("--months", type=int, default=6, help="차트 기간(개월, 기본 6)")
@@ -133,19 +152,19 @@ def main():
     # 차트가 없으면 요청한 거래일 수를 채울 만큼만 받는다 (한 달 약 20거래일)
     fetch_months = months + 4 if chart else max(1, -(-days // 20) + 1)
     try:
-        history = get_history(ticker, f"{fetch_months}mo")
+        history, currency = get_history(ticker, f"{fetch_months}mo")
     except ValueError as e:
         print(e)
         return
 
     close = history["Close"]
-    print_prices(ticker, close, days)
+    print_prices(ticker, close, days, currency)
 
     if chart:
         df = add_moving_averages(close)
         df = df[df.index >= df.index[-1] - pd.DateOffset(months=months)]
         path = CHART_DIR / f"{ticker}.png"
-        plot_chart(ticker, df, path)
+        plot_chart(ticker, df, path, currency)
         print(f"차트 저장: {path}")
 
 
