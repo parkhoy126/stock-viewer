@@ -1,0 +1,12 @@
+# 비밀 정보
+.env
+
+# Python 자동 생성
+__pycache__/
+*.pyc
+
+# 가상환경
+.venv/
+
+# macOS
+.DS_Store
